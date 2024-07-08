@@ -1,0 +1,552 @@
+ANSIBLE_NOTES
+
+** ANSIBLE uses PYTHON under the hood
+
+** Control Node Requirements
+	- Ansible can be installed on any linux system with Pythoy 3.8 or higher
+	- Ansible can not be installed on Windows
+
+** Control Node installation
+	- RedHat:
+		- sudo yum install Python
+		- sudo yum install python3-pip
+		- sudo pip install ansible
+		- sudo pip install paramiko (Ansible dependency to allow ssh connections)
+
+** File Configuration
+	-  Changes can be made and used in a configuration file which will be searched for in the following order:
+		- ANSIBLE_CONFIG (environment variable if set)
+		- ~/.ansible.cft (in the current directory)
+		- /etc/ansible/ansible.cfg
+
+	- Ansible inventory
+		- the file is located in /etc/ansible/hosts
+		- inventory file can be in two different formats:
+			- ini format
+				- e.g.:
+					[webservers]
+					foo.example.com
+					bar.example.com
+
+			- YAML format
+				- e.g.:
+					all:
+					  hosts:
+					    mail.example.com:
+					  children:
+					    webservers:
+					      hosts:
+					        foo.example.com
+					        bar.example.com
+					    dbservers:
+					      hosts:
+					      	one.example.com
+					      	two.example.com
+					      	three .example.com
+	- Variable Folders:
+		- host_vars
+		- group_vars
+		- contents(e.g.):
+			ansible_user: "developer"
+			ansible_password: "lastorangerestoreball8876"
+			ansible_network_os: ios
+
+
+** Understanding YAML
+	- starts swith ---
+	- extension is .yml or .yaml
+	- key-value pairs:
+		- key: value
+			- e.g.: hostname: 192.168.31.101
+			- there should be space after key:
+	- Indentatin
+		- use 2-space indentation
+		- (e.g.)
+			- routing_data:
+				bgp: 65001
+				ospf_neighbors:
+				  - 1.1.1.1
+				  - 2.2.2.2
+
+	- Note: In tasks section of the yaml file, write the name of module and under that provide the arguments
+		- e.g.: cisco.ios.ios_banner:
+					banner: motd
+					text: This is my banner
+					state: present
+
+** Extensions
+	- Install ssh and yaml extensions on VSCode for using ssh feature and writing yaml files in VSCode
+
+** Modules
+	- Module lists and details are available on ansible.com website in different categories
+	- Network Modules includes all the modules related to network issues
+	- All info related to arguments and details of how they function are in the Ansible modules documentation
+	- Register: a module for storing the outcome of the task
+	- debug: a module for assigning the register value to a variable
+
+** Running Ad-Hoc Commands
+	- format:
+		- ansible [host] -a "Command" [-u Username] [--become [--ask-become-pass]]
+		- e.g(usa and uk are group names in inventory file): 
+			- ansible uk -m raw -c paramiko -a "show ip interface brief"
+			- ansible usa -m raw -c paramiko -a "show ip interface brief"
+
+** Host & Group Variables
+	- Host vars have higher priority than group vars(i.e. the more specific the variable, the higher priority it has)
+	- By default Ansible merges groups at the same parent/child level in ASCII order, and the last group loaded overwrites the previous groups. e.g. an a_group will be merged with b_group and b_group vars that match will overwrite the ones in a_group.
+	- order/precedence:
+		- all groups (lowest)
+		- parent group
+		- child group
+		- host (Highest)
+	- YAML var file format:
+		- e.g.:
+usa:
+  children:
+    southeast:
+      children:
+        atlanta:
+          hosts:
+            host1:
+            host2:
+        raleigh:
+          hosts:
+            host2:
+            host3:
+      vars:
+        some_server: foo.southeast.example.com
+        halon_system_timeout: 30
+        self_destruct_countdown: 60
+        escape_pods: 2
+    northeast:
+    northwest:
+    southwest:
+
+	- INI var file format:
+		- e.g.:
+[atlanta]
+host1
+host2
+
+[raleigh]
+host2
+host3
+
+[southeast:children]
+atlanta
+raleigh
+
+[southeast:vars]
+some_server=foo.southeast.example.com
+halon_system_timeout=30
+self_destruct_countdown=60
+escape_pods=2
+
+[usa:children]
+southeast
+northeast
+southwest
+northwest
+
+
+** Accessing Data
+	- Referencing nested variables
+		- There are two notations:
+			- Bracket Notation(e.g.): {{ansible_facts["eth0"]["ipv4"]["address"]}}
+			- Dot Notation (e.g.): {{ansible_facts.eth0.ipv4.address}}
+
+** Defining Playbook Variables
+		- variables can be defined in the inventory as well as playbooks
+		- defining variables in playbook(e.g.):
+				- hosts: webservers
+					vars:
+						http_port: 80
+
+
+** Understanding Loops
+		-	 Standard loops
+				- iterating over a simple list(e.g.):
+						- name: Add several users
+							ansible.builtin.user:
+								name:	"{{	item	}}"
+								state:	present
+								groups:	"wheel"
+							loop:
+								-	testuser1
+								-	testuser2
+				- real-world example:
+
+---
+
+- name: "NTP CONFIG PLAYBOOK"
+  hosts:  usa
+  gather_facts: false
+  connection: network_cli
+
+  tasks:
+    - name: "Loop through NTP servers and configure"
+      vars:
+        myservers:
+          - "1.1.1.1"
+          - "2.2.2.2"
+          - "3.3.3.3"
+          - "4.4.4.4"
+      cisco.ios.ios_ntp_global:
+         config:
+          peers:
+            - peer:  "{{ item  }}"
+              version:  2
+      loop: "{{ myservers  }}"
+
+
+
+** Looping over IP Addresses
+		-e.g.:
+
+---
+
+- name: "Loop test"
+  hosts:  usa
+  gather_facts: true
+  connection: network_cli
+
+  tasks:
+    - name: "Loop through IP info"
+      debug:
+        msg:  "{{ ansible_facts['net_hostname'] }} has an IP address {{ item  }} configured"
+      loop: "{{ ansible_facts['net_all_ipv4_addresses'] }}" 
+
+
+
+** Conditional Logic
+		- When Keyword
+			- e.g.:
+
+tasks:
+	- name:	Configure SELinux to start mysql on any port
+		ansible.posix.seboolean:
+			name:	mysql_connect_any
+			state: true
+			persistent:	yes
+		when:	ansible_selinux.status == "enabled"
+
+
+
+			- another example of "When" conditional:
+
+
+tasks:
+	- name: Shut down Debian flavored systems
+		ansible.builtin.command: /sbin/shutdown -t now
+		when:	ansible_facts['os_family'] == "Debian"
+
+
+
+			-	if you have multiple conditions, you can group them with parentheses(e.g.):
+
+
+
+tasks:
+	- name:	Shut down CentOs 6 and Debian 7 systems
+		ansible.builtin.command:	/sbin/shutdown -t now
+		when:	(ansible_facts['distribution'] == "CentOs" and
+		ansible_facts['distribution_major_version'] == "6") or
+		(ansible_facts['distribution'] == "Debian" and
+		ansible_facts['distribution_major_version'] == "7") 
+
+
+			-	Another way of using multiple conditions. In this case, the logical "AND" operation will be applied(e.g.):
+
+
+tasks:
+	- name: Shut down CentOS 6 Systems
+		ansible.builtin.command: /sbin/shutdown -t now
+		when:
+			- ansible_facts['distribution'] == "CentOS"
+			-	ansible_facts['distribution_major_version'] == "6"
+
+
+
+** Note: Transforming dictionaries into lists
+		{{  dict | dict2items  }}
+
+
+** Ansible Filters
+		- Filters for formatting data
+			- the following filters will take a data structure in a template and render it in a slightly different format. These are occasionally useful for debugging:
+				- {{	some_variable	| to_json }}
+				- {{	some_variable	| to_yaml }}
+
+			- For human readable output, you can use:
+				- {{	some_variable	| to_nice_json }}
+				- {{	some_variable	| to_nice_yaml }}
+
+			- It's possible to change the indentation of both (new in version 2.2):
+				- {{	some_variable	| to_nice_json(indent=2) }}
+				- {{	some_variable	| to_nice_yaml(indent=2) }}
+
+			- Alternatively, you may be reading some already formatted data:
+				- {{	some_variable	| from_json }}
+				- {{	some_variable	| from_yaml }}
+
+		- List filters
+			- These filters all operate on list variables
+			- To get the minimum and maximum value from list of numbers
+				-	{{ list | min }}
+				-	{{ [3, 4, 2] | max }}
+
+			- To get difference of 2 lists(items in 1 that don't exist in 2):
+				- {{ list | difference(list2)}}
+
+			-	To get the symmetric difference of 2 lists(items exclusive to each list):
+				- {{ list | symmetric_difference(list2) }}
+
+
+		- IP Address Filters
+			- In order to be able to use this filter, we should install a module called netaddr:
+					- pip install netaddr  
+
+
+** Jinja2
+		- Jinja is a fast, expressive, extensible templating engine. Special placeholders in the template allow writing code similar to Python syntax. Then the template is passed data to render the final document
+		- Variables(e.g.):
+			- {{ foo.bar }}
+			-	{{ foo['bar'] }} 
+
+		- Jinja2 Loops
+			- syntax for invoking loop within python:
+				- {% for item in my_list %}
+
+
+		- Jinja2 Conditionals
+			- if conditional statements(e.g.):
+
+
+router bgp {{ BGP.ASN }}
+
+{% for nbor in BGP.peers %}
+{% if nbor.peer_asn  == "65002" %}
+neighbor {{ nbor.neighbor }} remote-as {{ nbor.peer_asn }}
+neighbor {{ nbor.neighbor }} update-source loopback0
+{% else %}
+neighbor {{ nbor.neighbor }} remote-as {{ nbor.peer_asn }}
+{% endif %}
+{% endfor %}
+
+
+		- Registering variables
+			- The usage of it is to see the result of sending commands to the device through a playbook
+			- in Ansible we can capture the output using "REGISTER" Module and then assign that to a variable
+			- here is an example of how to register a variable:
+					- register: ntp_result
+
+
+** Handlers
+		- sometimes you want a task to run only when a change is made on a machine
+		- (e.g.) restarting a service if a task updates the configuration of that service, but not if the configuration is unchanged
+		- in order to call the handler, we use "notify" keyword along with handler's name
+		- (e.g.)
+
+
+
+---
+- name: Verify apache installation
+  hosts: webservers
+  vars:
+    http_port: 80
+    max_clients: 200
+  remote_user: root
+  tasks:
+    - name: Ensure apache is at the latest version
+      ansible.builtin.yum:
+        name: httpd
+        state: latest
+
+    - name: Write the apache config file
+      ansible.builtin.template:
+        src: /srv/httpd.j2
+        dest: /etc/httpd.conf
+      notify:
+      - Restart apache
+
+    - name: Ensure apache is running
+      ansible.builtin.service:
+        name: httpd
+        state: started
+
+  handlers:
+    - name: Restart apache
+      ansible.builtin.service:
+        name: httpd
+        state: restarted
+
+
+
+
+** Ansible VAULT (Encrypting content)
+		- encrypts variables and files so you can protect sensitive content such as passwords or keys rather than leaving it visible as plaintext in playbooks or roles
+		- use the passwords with the "ansible-vault" cli tool to:
+		 		- create and view encrypted variables
+		 		- create encrypted files
+		 		- encrypt existing files
+		 		- edit, re-key, or decrypt files
+		 		- place encrypted content under source control and share it more safely
+
+		- Using Ansible Vault
+			- ansible-vault encrypt [FileName]
+				-	e.g.: ansible-vault encrypt usa.yml
+			- to run a playbook which uses a vault-encrypted file:
+					-	(e.g.) ansible-playbook encrypt-test.yml --ask-vault-pass
+			- to view the contents of a vault-encrypted file
+					-	(e.g.) ansible-vault view usa.yml
+			- to edit the contents of a vault-encrypted file
+					-	(e.g.) ansible-vault edit usa.yml  
+			- to create an encrypted file from scratch
+					- (e.g.)  ansible-vault create uk.yml
+			-	to decrypt the contents of a vault-encrypted file
+					- (e.g.)	ansible-vault decrypt uk.yml
+			-to change the password of a vault-encrypted file
+					-	(e.g.)	ansible-vault rekey uk.yml
+
+
+
+**Roles
+   - let you automatically load related vars, files, tasks, handlers, and other Ansible artifacts based on a known file structure
+   - After you group your content into roles, you can easily reuse them and share them with other users.
+   - An Ansible role has a defined directory structure with eight main standard directories
+   - You must include at least one of these directories in each role
+   - e.g.:
+
+
+# playbooks
+site.yml
+webservers.yml
+fooservers.yml
+
+
+roles/
+    common/               # this hierarchy represents a "role"
+        tasks/            #
+            main.yml      #  <-- tasks file can include smaller files if warranted
+        handlers/         #
+            main.yml      #  <-- handlers file
+        templates/        #  <-- files for use with the template resource
+            ntp.conf.j2   #  <------- templates end in .j2
+        files/            #
+            bar.txt       #  <-- files for use with the copy resource
+            foo.sh        #  <-- script files for use with the script resource
+        vars/             #
+            main.yml      #  <-- variables associated with this role
+        defaults/         #
+            main.yml      #  <-- default lower priority variables for this role
+        meta/             #
+            main.yml      #  <-- role dependencies
+        library/          # roles can also include custom modules
+        module_utils/     # roles can also include custom module_utils
+        lookup_plugins/   # or other types of plugins, like lookup in this case
+
+    webtier/              # same kind of structure as "common" was above, done for the webtier role
+    monitoring/           # ""
+    fooapp/               # ""
+
+
+
+
+   - By default, Ansible will look in each directory within a role for a main.yml file for relevant content
+   - Ansible Roles Directories:
+   		- tasks/main.yml - the main list of tasks that the role executes
+   		-	handlers/main.yml - handlers, which may be used within or outside this role
+   		-	library/my_module.py - modules, which may be used within this role
+   		-	defaults/main.yml - default variables for the role
+   		-	vars/main.yml - other variables for the role
+   		-	files/main.yml - files that the role deploys
+   		-	templates/main.yml - templates that the role deploys
+   		-	meta/main.yml - metadata for the role, including role dependencies and optional Galaxy metadata such as platforms supported
+   - to automatically create Roles directory structure, do as following example:
+   		-	e.g.: ansible-galaxy init nuggets 
+
+
+**Ansible Galaxy
+		- It's a sort of marketplace for Ansible modules and roles
+		- These are developed by a community of people across the world
+		* Note:
+			- Cisco Genie Library: 
+				- a Python library which contains all the tools needed for Networking Test Automation
+				- it's part of Python Automated Test System(PyATS) developed by cisco
+				- it allows us to send show commands
+				- we can use Genie parsers to parse data received into structured data
+				- specially in legacy networking devices(where structured data doesn't come natively from the device), it can be useful
+
+		- in order to use the ansible galaxy materials:
+				- go to https://galaxy.ansible.com/
+				- search for the keyword
+				- navigate through collections or roles
+				- use the install command of the specific role or collection you desire
+					- e.g.: ansible-galaxy collection install clay584.genie
+
+		- Ansible Collections:
+				- a distribution format for Ansible content that can include playbooks, roles, modules, and plugins
+
+		- in order to get a list of the stuff installed from Ansible Galaxy
+				- ansible-galaxy list
+
+		- in order to search for something in Ansible Galaxy
+				- ansible-galaxy search [keyword]
+				- e.g.: ansible-galaxy search netbox
+
+		- to create and activate python virtual environment
+				- python3 -m venv .venv
+				- cd .venv
+				- source bin/activate
+
+		- Installing cisco genie collection
+			- in order to install pyATS which is essential for cisco genie library
+					- pip install pyats
+			- in order to install genie library
+					- pip install genie 
+
+**VyOS
+		- a fully open source network OS based on Debian
+		- provides a free routing, firewall, VPN, NAT platform for IPv4 and IPv6 networking
+		- derived from the software-based virtual router community edition of Vyatta, Vyatta Core
+		- in order to download a VyOS
+				- go to https://vyos.io/
+				- go to "LTS" or "Rolling Release" section and download an iso file
+				- Then walk through following documentation to add VyOS to EveNG
+						- https://www.eve-ng.net/index.php/documentation/howtos/howto-add-vyos-vyatta/
+		- To set an ip on one of the interfaces of VyOS
+				# configure
+				# set interface ethernet eth0 address "192.168.116.154/24"
+				# commit
+				# show
+		- To enable ssh on VyOS
+				# set service ssh port "22"
+				# commit
+		- To make the configuration changes to survive the reboot
+				# save
+
+
+	- Exploring the VyOS Modules
+		- to install ansible-galaxy collection on vyos
+				- search for ansible vyos on Google
+				- Then go to this link
+						- https://docs.ansible.com/ansible/latest/collections/vyos/vyos/vyos_config_module.html
+				- then install the collection using the install command on that page
+						- e.g.: ansible-galaxy collection install vyos.vyos
+				- to use it in a playbook, use the following module:
+						- vyos.vyos.vyos_config
+
+
+**BGP Overview
+	- BGP is a EGP(Exterior Gateway Protocol)
+	- AS(Autonomous System) is a concept for netowrks in BGP
+	- ASN(AS Number) is the number associated to each network running in BGP
+		- Public ASN
+				- in the range of 1-64511
+		- Private ASN
+				- in the range of 64512-65535  
+	- Two types of BGP
+		- eBGP (external BGP)
+		- iBGP (internal BGP)
+
+
