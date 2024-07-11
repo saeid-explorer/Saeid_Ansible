@@ -1,0 +1,17 @@
+- name: "Directories PLAYBOOK"
+  hosts: labs
+
+  tasks:
+    - name: "Collect facts about local host"
+      ansible.builtin.setup:
+        filter:
+          - "ansible_date_time"
+
+    - name: "Task 2: Recording Variable"
+      set_fact:
+        TD: "{{ ansible_date_time.date }}"
+    
+    - name: "Creating Directories"
+      file:
+        path: "/root/Backups/{{ TD }}"
+        state: directory

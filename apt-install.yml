@@ -1,0 +1,13 @@
+---
+ - name: Ansible apt module examples
+   hosts: ALL
+   become: true
+   tasks:
+    - name: Install nload
+      apt:
+        name: nload
+        state: present
+    - name: Install iftop
+      apt:
+        name: iftop
+        state: present

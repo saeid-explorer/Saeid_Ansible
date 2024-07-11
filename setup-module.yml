@@ -1,0 +1,14 @@
+---
+- name: "TEST PLAYBOOK"
+  hosts: ALL
+
+
+  tasks:
+    - name: "Collect facts about hosts"
+      ansible.builtin.setup:
+        filter:
+          - "ansible_date_time"
+
+    - name: "Task 2: Recording Variable"
+      set_fact:
+        TD: "{{ ansible_date_time.date }}"
