@@ -1,0 +1,59 @@
+---
+- name: "Play 1"
+  hosts: localhost
+
+
+  tasks:
+    - name: "Task 1 of Play 1:Collect facts about hosts"
+      ansible.builtin.setup:
+        filter:
+          - "ansible_date_time"
+
+    - name: "Task 2 of play 2: Recording Variable"
+      set_fact:
+        TD: "{{ ansible_date_time.date }}"
+
+    - name: "Task 3 of Play 1: Creating Directories"
+      file:
+        path: "Backups/{{ TD }}"
+        state: directory
+      run_once: true
+
+    - name: "Play2: Backing up Configurations"
+      hosts: all
+      connections: network_cli
+
+      tasks:
+        - name: "Task 1 of Play 2: Pull Configurations from Remote Devices"
+          napalm_get_facts:
+            hostname: "{{ ansible_host }}"
+            username: "{{ ansible_user }}"
+            password: "{{ ansible_password }}"
+            dev_os: "{{ napalm_platform }}"
+            filter: ["config"]
+          register: result
+
+        - name: "Task 2 of Play 2: Create Startup Config Subdirectory"
+          file:
+            path: "Backups/{{ hostvars.Localhost.TD }}/startup-configs"
+            state: directory
+          run_once: true
+
+        - name: "Task 3 of Play 2: Create Running Config Subdirectory"
+          file:
+            path: "Backups/{{ hostvars.Localhost.TD }}/running-configs"
+            state: directory
+          run_once: true
+
+        - name: "Task 4 of Play 2: Copy Startup Config to Disk"
+          copy:
+            content: "{{ result.ansible_facts.napalm_config.startup }}"
+            dest: "Backups/{{ hostvars.Localhost.TD }}/startup-configs/{{ inventory_hostname }}-startup-config.txt"
+
+        - name: "Task 5 of Play 2: Copy Running Configs to Disk"
+          copy:
+            content: "{{ result.ansible_facts.napalm_config.running }}"
+            dest: "Backups/{{ hostvars.Localhost.TD }}/running-configs/{{ inventory_hostname }}-running-config.txt"
+
+            
+ 
