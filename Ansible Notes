@@ -550,3 +550,8 @@ roles/
 		- iBGP (internal BGP)
 
 
+** Ansible Tower
+	- Previously it was called Ansible AWX
+	- Ansible Tower then is replaced with another thing called an Automation Controller which operates within the RedHat Ansible Automation Platform 
+	- It's a GUI(Web-based solution) for Ansible
+
