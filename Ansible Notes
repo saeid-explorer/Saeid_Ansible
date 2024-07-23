@@ -463,7 +463,9 @@ roles/
    		-	templates/main.yml - templates that the role deploys
    		-	meta/main.yml - metadata for the role, including role dependencies and optional Galaxy metadata such as platforms supported
    - to automatically create Roles directory structure, do as following example:
-   		-	e.g.: ansible-galaxy init nuggets 
+   		-	e.g.: ansible-galaxy init nuggets
+		or
+		- 	e.g.: ansible-galaxy init --init-path roles/ sample_ansible_structure
 
 
 **Ansible Galaxy
